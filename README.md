@@ -4,11 +4,11 @@ Arduino: Nano-R4CommandLine_Parser
 A simple ASCII commandline- interface (CLI) with SD-Card File- functions and comfort. Supports VT100-Terminal emulation (like TeraTerm, PUTTY, GTKTerm and other) on the USB-Port.
 This project keeps a set of helpful functions for the Arduino NANO-R4 with SD-Card.
 ![IMG_0578_comp](https://github.com/user-attachments/assets/54898bd9-174e-4ba1-9f40-50ecfe74a7fa)
-An UNO-R4 minima with SD-Card, Battery bufferd RTC, BME680 and 20x4 LCD on I2C- bus
+Picture shows an UNO-R4 minima with SD-Card, Battery bufferd RTC, BME680 and 20x4 LCD on I2C- bus.
 The NANO-R4 will work in the the same hardeware envirement
 
 The software supports the CPU internal RTC function and 4ticks/sec callback function for real-time applications.
-The NANO-R4 is clocked by a Quarz reference and the CPU-RTC is working well - as better as the UNO-R4 CPU-RTC
+The NANO-R4 is clocked by a Quarz reference and the CPU-RTC is working well - as better as the UNO-R4 CPU-RTC!
 In an equal form there is a 100 Hz GPT- Timer running with own callback.
 
 **AUTO** - shows the ADC 0-3 voltage (Average of 10 measurements)
@@ -44,6 +44,5 @@ In an equal form there is a 100 Hz GPT- Timer running with own callback.
 Needed:
 -	the SD-Card library must be available
 
-YModem transfer reached up to 23 kByte/s
-XModem can reach 6-10 kByte/s
+YModem transfer reached up to 23 kByte/s in my tests and the XModem can should transfer 6-10 kByte/s
 
