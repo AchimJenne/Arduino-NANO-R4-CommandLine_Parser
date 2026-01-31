@@ -131,7 +131,7 @@ int fnc_CONFIG(const char* szCmdLn)
      Serial.println(F(": failed"));
   } else {
     digitalWrite(LED_BUILTIN, 1);
-    digitalWrite(LEDR, 1);
+    
     Serial.println(F(": OK"));
     Serial.println(F("SPI-Interface"));
 
@@ -143,16 +143,19 @@ int fnc_CONFIG(const char* szCmdLn)
     Serial.println(PIN_SPI_SCK);
     Serial.print(F("CS   : "));
     Serial.println(PIN_SPI_CS);
-    delay(500);
-    digitalWrite(LEDG, 1);
-    delay(500);
-    digitalWrite(LEDB, 1);
-    delay(500);
+    
     digitalWrite(LEDR, 0);
     delay(500);
     digitalWrite(LEDG, 0);
     delay(500);
     digitalWrite(LEDB, 0);
+    delay (500);
+    digitalWrite(LEDR, 1);
+    delay(500);
+    digitalWrite(LEDG, 1);
+    delay(500);
+    digitalWrite(LEDB, 1);
+    delay(500);
   }
   SD.end(); 
   digitalWrite(LED_BUILTIN, 0);
@@ -822,8 +825,17 @@ int fnc_XTRAN(const char* szCmdLn)
 {
   /* place your code here */
   char sLine[ILINE]={""};
-  uint64_t iStrtTi = millis();
+  uint64_t iFSize = 0;
+  uint16_t iCSum, iCrc;
+  uint16_t iBlkCnt = 1;
+  uint8_t iReTr = 0; 
   bool bTiOut= false;
+  bool bTrans = false;
+  bool bCrc = true;
+  char inChar;       
+  unsigned char ucBuffer[Y_BSIZE];
+  uint64_t iStrtTi;
+
   Serial.print(F(" : "));
   if (strlen(szCmdLn) > 1){
     digitalWrite(PIN_LED, 1); 
@@ -832,63 +844,85 @@ int fnc_XTRAN(const char* szCmdLn)
     if (SD.begin(SDCRD)) {
       File FH1 = SD.open(sLine, FILE_READ);
       if (FH1 != 0) {
-        uint64_t iFSize = 0;
-        int16_t iCSum, iCrc;
-        uint8_t iBlkCnt = 1;
-        uint8_t iReTr = 0; 
-        bool bTrans = false;
-        char inChar;
-        
-        unsigned char ucBuffer[X_BLOCK_SIZE];
         iFSize = FH1.size();
         Serial.print(iFSize);
         Serial.print(F(" Bytes"));
         while ((FH1.available()!=0)&&(!bTiOut)) {
-          while ((Serial.readBytes(&inChar,1)==0)&&(millis()<(iStrtTi+ (X_TIMEOUT*12)))) {  } 
+          while ((Serial.readBytes(&inChar,1)==0) && (millis()<(iStrtTi+ (X_TIMEOUT*12)))) {  } 
           if (millis()>=(iStrtTi+(X_TIMEOUT*12))){
             Serial.print("\nTimeout");
             for (int iL= 1; iL<3; iL++){
-              Serial.write((uint8_t)CAN);
+              Serial.write((uint8_t) CAN);
             } /* end for */
             bTiOut= true;
           } else
-          if (((inChar == NAK) && (!bTrans)) || ((inChar == ACK) && (bTrans))) {
+          // Datablock is CRC 1kByte
+          if (((inChar=='C')&&(!bTrans))||((inChar==ACK)&&(bTrans)&&bCrc)) {
+            bCrc = true;
             iStrtTi= millis();
-              bTrans= true;
-              iCSum = 0;
-              iCrc  = 0; 
-              iReTr = 0;
-              int iRdLen= FH1.read(ucBuffer, X_BLOCK_SIZE);
-              if (iRdLen > 0) {
-                if (iRdLen < X_BLOCK_SIZE) {
-                  for (int iL= iRdLen; iL<X_BLOCK_SIZE; iL++){
-                    ucBuffer[iL]= 0x00;
-                  } /* end for */
-                } /* end if */
-                Serial.write((uint8_t) SOH);
-                Serial.write((uint8_t) iBlkCnt);
-                Serial.write((uint8_t) ~iBlkCnt);
-                // Blocktransfer vs. single char transfer
-                Serial.write(ucBuffer, X_BLOCK_SIZE); // block transfer
-                for (int iL=0; iL<X_BLOCK_SIZE; iL++){
-                  // Serial.write(ucBuffer[iL]);  // single character transfer
-                  uicalcCrc(ucBuffer[iL], iCrc);
-                  iCSum = iCSum + ucBuffer[iL];
-                  iCSum = iCSum & 0x00ff;
+            bTrans= true;
+            iReTr = 0;
+            int iRdLen= FH1.read(ucBuffer, Y_BSIZE);
+            if (iRdLen > 0) {
+              if (iRdLen < Y_BSIZE) {
+                for (int iL= iRdLen; iL<Y_BSIZE; iL++){
+                  ucBuffer[iL]= 0x00;
                 } /* end for */
-                Serial.write((uint8_t) iCSum);
-                iBlkCnt++;
               } /* end if */
+              Serial.write((uint8_t) STX);
+              Serial.write((uint8_t) iBlkCnt);
+              Serial.write((uint8_t) ~iBlkCnt);
+              Serial.write(ucBuffer, Y_BSIZE); // block transfer
+              iCrc = 0;
+              for (int iL=0; iL<Y_BSIZE; iL++){
+                iCrc= uicalcCrc(ucBuffer[iL], iCrc);
+              } /* end for */
+              Serial.write((uint8_t) ((iCrc &0xff00) >>8));
+              Serial.write((uint8_t) (iCrc & 0x00ff));
+              iBlkCnt++;
+              iBlkCnt= iBlkCnt & 0x00ff;
+            // } else {
+            //   bCrc = false;  // if rest >128 Byte, transfer in 128 byte mode
+            } /* end if */
+          } else
+          // checksum 128 Byte
+          if (((inChar==NAK)&&(!bTrans))||((inChar==ACK)&&(bTrans))||!bCrc) {
+            bCrc= false;          
+            iStrtTi= millis();
+            bTrans= true;
+            iCSum = 0;
+            iReTr = 0;
+            int iRdLen= FH1.read(ucBuffer, X_BSIZE);
+            if (iRdLen > 0) {
+              if (iRdLen < X_BSIZE) {
+                for (int iL= iRdLen; iL<X_BSIZE; iL++){
+                  ucBuffer[iL]= 0x00;
+                } /* end for */
+              } /* end if */
+              Serial.write((uint8_t) SOH);
+              Serial.write((uint8_t) iBlkCnt);
+              Serial.write((uint8_t) ~iBlkCnt);
+              // Blocktransfer vs. single char transfer
+              Serial.write(ucBuffer, X_BSIZE); // block transfer
+              for (int iL=0; iL<X_BSIZE; iL++){
+                iCSum = iCSum + ucBuffer[iL];
+                iCSum = iCSum & 0x00ff;
+              } /* end for */
+              Serial.write((uint8_t) iCSum);
+              iBlkCnt++;
+              iBlkCnt= iBlkCnt & 0x00ff;
+            } /* end if */
           } else
           if (inChar == CAN){
             for (int iL= 1; iL<3; iL++){
-              Serial.write((uint8_t)CAN);
+              Serial.write((uint8_t) CAN);
             }
           } /* end if */
-        } /* end while */  
-        delay (10);
+        } /* end while */ 
         Serial.write((uint8_t) EOT);
-        delay(10);
+        while ((Serial.readBytes(&inChar,1)==0) && (millis()<(iStrtTi+ (X_TIMEOUT)))) {  } 
+        Serial.write((uint8_t) EOT);
+        while ((Serial.readBytes(&inChar,1)==0) && (millis()<(iStrtTi+ (X_TIMEOUT)))) {  } 
         FH1.close();
       } else {
         Serial.print(sLine);
@@ -913,9 +947,6 @@ int fnc_XTRAN(const char* szCmdLn)
 int fnc_YREC(const char* szCmdLn)
 {
   /* place your code here */
-  #define Y_BSIZE 1024
-  #define X_BSIZE 128
-  #define Y_TIOUT 10000
   char sLine[ILINE] = {"xxxxx.yyy"};
   int32_t iByteCnt = 0, iByteSum = 0, iBlkCnt;
   int16_t iRecState;   // Receiver statemachine
@@ -950,19 +981,11 @@ int fnc_YREC(const char* szCmdLn)
           iRecState = 1; // found Header token 
         } else 
         if ( (inChar== EOT)&&(millis()<iStrtTi) ) {
-          #ifdef DEBUG
-          Serial1.print("\nEOT inChar 0x");
-          Serial1.print(inChar, HEX);
-          #endif
           Serial.write((uint8_t)NAK); // end of transmision
           delay (20);
           Serial.write((uint8_t)ACK);
           iRecState = 901;
         } else {
-          #ifdef DEBUG
-          Serial1.print("\nError 0x");
-          Serial1.print(inChar, HEX);
-          #endif
         } /* end if */
       } else
       if ((iBlkCnt < 5)&&(millis()>=iStrtTi) ) {
@@ -1012,7 +1035,6 @@ int fnc_YREC(const char* szCmdLn)
       if (millis()<iStrtTi) {
         if (strlen((char*)ucBuffer)>=1) {
           argPathFn( (char*)ucBuffer, &sLine[0]);
-          // strcpy(&sLine[0], (char*)ucBuffer);
           iRecState = 4;
         } else {
           iByteSum = iByteSum + iByteCnt;
@@ -1029,10 +1051,6 @@ int fnc_YREC(const char* szCmdLn)
       while((Serial.readBytes(&ucBuffer[0],iBlkSize)<iBlkSize)&&(millis()<iStrtTi) ) { }  
       if (millis()<iStrtTi) {
         iByteCnt= iByteCnt + iBlkSize;
-        #ifdef DEBUG
-        Serial1.print("\nByteCnt 0x");
-        Serial1.print(iByteCnt, HEX);
-        #endif
         iRecState = 4;
       } else {
         iRecState = 93;
@@ -1131,6 +1149,132 @@ int fnc_YREC(const char* szCmdLn)
 int fnc_YTRAN(const char* szCmdLn)
 {
   /* place your code here */
+  char sLine[ILINE]={""};
+  bool bTiOut= false;
+  uint64_t iFSize = 0;
+  uint16_t iCSum, iCrc;
+  uint16_t iBlkCnt = 1;
+  uint8_t iReTr = 0; 
+  bool bTrans = false;
+  bool bCrc = true;
+  char inChar;       
+  unsigned char ucBuffer[Y_BSIZE];
+  uint64_t iStrtTi = millis();
+
+  Serial.print(F(" : "));
+  if (strlen(szCmdLn) > 1){
+    digitalWrite(PIN_LED, 1); 
+    argPathFn( szCmdLn, &sLine[0]);
+    iStrtTi = millis(); 
+    if (SD.begin(SDCRD)) {
+      File FH1 = SD.open(sLine, FILE_READ);
+      if (FH1 != 0) {
+        iFSize = FH1.size();
+        Serial.print(iFSize);
+        Serial.print(F(" Bytes"));
+        while ((FH1.available()!=0)&&(!bTiOut)) {
+          while ((Serial.readBytes(&inChar,1)==0) && (millis()<(iStrtTi+ (X_TIMEOUT*12)))) {  } 
+          if (millis()>=(iStrtTi+(X_TIMEOUT*12))){
+            Serial.print("\nTimeout");
+            for (int iL= 1; iL<3; iL++){
+              Serial.write((uint8_t) CAN);
+            } /* end for */
+            bTiOut= true;
+          } else
+          // Datablock is CRC 1kByte
+          if (((inChar=='C')&&(!bTrans))||((inChar==ACK)&&(bTrans)&&bCrc)) {
+            #ifdef DEBUG
+            Serial1.print("\nCRC inChar 0x");
+            Serial1.print(inChar,HEX);
+            Serial1.print(" bTrans ");
+            Serial1.print(bTrans);
+            Serial1.print(" bCrc ");
+            Serial1.print(bCrc);
+            // delay(20000);
+            #endif
+            bCrc = true;
+            iStrtTi= millis();
+            bTrans= true;
+            iReTr = 0;
+            int iRdLen= FH1.read(ucBuffer, Y_BSIZE);
+            if (iRdLen > (Y_BSIZE-128)) {
+              if (iRdLen < Y_BSIZE) {
+                for (int iL= iRdLen; iL<Y_BSIZE; iL++){
+                  ucBuffer[iL]= 0x00;
+                } /* end for */
+              } /* end if */
+              Serial.write((uint8_t) STX);
+              Serial.write((uint8_t) iBlkCnt);
+              Serial.write((uint8_t) ~iBlkCnt);
+              Serial.write(ucBuffer, Y_BSIZE); // block transfer
+              iCrc = 0;
+              for (int iL=0; iL<Y_BSIZE; iL++){
+                iCrc= uicalcCrc(ucBuffer[iL], iCrc);
+              } /* end for */
+              Serial.write((uint8_t) ((iCrc &0xff00) >>8));
+              Serial.write((uint8_t) (iCrc & 0x00ff));
+              iBlkCnt++;
+              iBlkCnt= iBlkCnt & 0x00ff;
+            } else {
+              bCrc = false;  // if rest >128 Byte, transfer in 128 byte mode
+            } /* end if */
+          } else
+          // checksum 128 Byte
+          if (((inChar==NAK)&&(!bTrans))||((inChar==ACK)&&(bTrans))||!bCrc) {
+            #ifdef DEBUG
+            Serial1.print("\nChS inChar 0x");
+            Serial1.print(inChar,HEX);
+            // delay(20000);
+            #endif  
+            bCrc= false;          
+            iStrtTi= millis();
+            bTrans= true;
+            iCSum = 0;
+            iReTr = 0;
+            int iRdLen= FH1.read(ucBuffer, X_BSIZE);
+            if (iRdLen > 0) {
+              if (iRdLen < X_BSIZE) {
+                for (int iL= iRdLen; iL<X_BSIZE; iL++){
+                  ucBuffer[iL]= 0x00;
+                } /* end for */
+              } /* end if */
+              Serial.write((uint8_t) SOH);
+              Serial.write((uint8_t) iBlkCnt);
+              Serial.write((uint8_t) ~iBlkCnt);
+              // Blocktransfer vs. single char transfer
+              Serial.write(ucBuffer, X_BSIZE); // block transfer
+              for (int iL=0; iL<X_BSIZE; iL++){
+                // Serial.write(ucBuffer[iL]);  // single character transfer
+                iCSum = iCSum + ucBuffer[iL];
+                iCSum = iCSum & 0x00ff;
+              } /* end for */
+              Serial.write((uint8_t) iCSum);
+              iBlkCnt++;
+              iBlkCnt= iBlkCnt & 0x00ff;
+            } /* end if */
+          } else
+          if (inChar == CAN){
+            for (int iL= 1; iL<3; iL++){
+              Serial.write((uint8_t) CAN);
+            }
+          } /* end if */
+        } /* end while */ 
+        Serial.write((uint8_t) EOT);
+        while ((Serial.readBytes(&inChar,1)==0) && (millis()<(iStrtTi+ (X_TIMEOUT)))) {  } 
+        Serial.write((uint8_t) EOT);
+        while ((Serial.readBytes(&inChar,1)==0) && (millis()<(iStrtTi+ (X_TIMEOUT)))) {  } 
+        FH1.close();
+      } else {
+        Serial.print(sLine);
+        Serial.println(F(" not found!"));
+      } 
+      if (!bTiOut) Serial.println(F(" done!"));
+      SD.end();
+      digitalWrite(PIN_LED,0);
+    }
+  } else {
+    Serial.println(" no argument!");
+  }
   return( eYTRAN );
 }  /* end of fnc_YTRAN */ 
 

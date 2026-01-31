@@ -17,7 +17,10 @@
 #define CAN  0x18
 #define PAD  0x1a
 
-#define X_BLOCK_SIZE  128
+// #define X_BLOCK_SIZE  128
+#define Y_BSIZE 1024
+#define X_BSIZE 128
+#define Y_TIOUT 10000
 #define X_TIMEOUT 5000
 #define X_RETRANS 10
 // #define DEBUG
