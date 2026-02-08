@@ -139,6 +139,9 @@ void setup() {
     Serial.println(F("OK"));
   } /* end if */
   SD.end();
+  // set date time callback function
+  SdFile::dateTimeCallback(setFATDdatetime);
+
   if (beginTimer(10)) {          // Frequency in Hz; timer interrupt
     Serial.println(F("GPT- OK"));
   } else {

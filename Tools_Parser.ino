@@ -20,6 +20,20 @@ void synToExtRTC()
 
 /**************************************************/
 /**
+  * @brief FAT real time callback
+**/
+// call back for file timestamps
+void setFATDdatetime(uint16_t* date, uint16_t* time) {
+  RTC.getTime(inRTC);
+  struct tm mytm= inRTC.getTmTime();
+  // return date 
+  *date = (((mytm.tm_year-80)<<9)|((mytm.tm_mon+1)<<5)|(mytm.tm_mday));
+  // return time 
+  *time = ((mytm.tm_hour<<11)|(mytm.tm_min<<5)|(mytm.tm_sec>>1));
+}
+
+/**************************************************/
+/**
   * @brief periodic real time clock event/callback
 **/
 void periodicCallback()
