@@ -1,3 +1,4 @@
+#include "utility/SdFat.h"
 /****************************************************************************/
 /**
   * @brief copy external RTC-values into internal RTC
@@ -17,6 +18,7 @@ void synToExtRTC()
   mytime.setSaveLight(SaveLight::SAVING_TIME_ACTIVE);
   RTC.setTime(mytime);
 }
+
 
 /**************************************************/
 /**
