@@ -47,7 +47,8 @@ In an equal form there is a 100 Hz GPT- Timer running on callback event.
 
 **Old-School X/Y-Modem File Transfer**
 Most of the Terminal emulations supports X-Modem File transfer. I think, it is helpful to transfer some files to/from the uC without stopping the full environment or removing the SD-Card from the uC.
-The XModem transfer from uC to Host is the only implementation. Multiple filetransfers in this direction could be helpful, but each file must be defined on the commandline like XModem. 
+
+From uC to host: The XModem transfer in 128Byte/Checksum and 1kB/CRC was implemented. YModem multiple filetransfers in this direction could be helpful but not implemented.each file must be defined on the commandline like XModem. 
 Transfer rate: In the 128Byte-Transfermode the transfer rate is more then 20kByte/s and up to 70kByte/s in CRC-Mode.
 
 The YModem transfer from host to uC reached transfer rates 23-60 kByte/s in my tests. The XModem transfer rate is 6-10 kByte/s in 128Byte mode and 20-50 kByte/s in 1k-CRC.
